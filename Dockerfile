@@ -1,0 +1,10 @@
+# syntax=docker/dockerfile:1
+FROM golang:1.21 AS build
+WORKDIR /src
+COPY . .
+RUN CGO_ENABLED=0 go build -a -installsuffix cgo -o /bin/snapshotter ./cmd/snapshotter
+RUN chmod +x /bin/snapshotter
+
+FROM busybox
+COPY --from=build /bin/snapshotter /snapshotter
+CMD ["/snapshotter"]
