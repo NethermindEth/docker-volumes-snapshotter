@@ -10,14 +10,8 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-type volumeData struct {
-	Id     string `yaml:"id"`
-	Type   string `yaml:"type"`
-	Target string `yaml:"target"`
-}
-
 func Backup(c *config.Config) error {
-	tarFile, err := NewTarFile(c.Out, true)
+	tarFile, err := NewTarFileWriter(c.BackupFile, true)
 	if err != nil {
 		return err
 	}
@@ -67,7 +61,7 @@ func Backup(c *config.Config) error {
 	if err != nil {
 		return err
 	}
-	err = tarFile.AddFile(dataTemp.Name(), filepath.Join(c.Prefix, "volumes-data.yml"))
+	err = tarFile.AddFile(dataTemp.Name(), filepath.Join(c.Prefix, volumesDataFileName))
 	if err != nil {
 		return err
 	}
