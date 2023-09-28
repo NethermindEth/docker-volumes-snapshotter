@@ -7,4 +7,4 @@ RUN chmod +x /bin/snapshotter
 
 FROM busybox
 COPY --from=build /bin/snapshotter /snapshotter
-CMD ["/snapshotter"]
+ENTRYPOINT [ "/snapshotter" ]
