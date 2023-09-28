@@ -10,9 +10,9 @@ import (
 )
 
 type Config struct {
-	Prefix  string   `yaml:"prefix"`
-	Out     string   `yaml:"out"`
-	Volumes []string `yaml:"volumes"`
+	Prefix     string   `yaml:"prefix"`
+	BackupFile string   `yaml:"backup_file"`
+	Volumes    []string `yaml:"volumes"`
 }
 
 func LoadConfig(path string) (*Config, error) {

@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/NethermindEth/docker-volumes-snapshotter/internal/config"
+	"github.com/NethermindEth/docker-volumes-snapshotter/pkg/config"
 	"gopkg.in/yaml.v2"
 )
 
