@@ -7,11 +7,10 @@ import (
 )
 
 func RestoreCmd() *cobra.Command {
-	var configFlag string
-	cmd := cobra.Command{
+	return &cobra.Command{
 		Use: "restore",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			conf, err := config.LoadConfig(configFlag)
+			conf, err := config.LoadConfig()
 			if err != nil {
 				return err
 			}
@@ -23,6 +22,4 @@ func RestoreCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&configFlag, "config", "/snapshotter.yml", "config file with all the volumes to restore")
-	return &cmd
 }

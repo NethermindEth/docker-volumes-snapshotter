@@ -6,12 +6,13 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/NethermindEth/docker-volumes-snapshotter/pkg/backuptar"
 	"github.com/NethermindEth/docker-volumes-snapshotter/pkg/config"
 )
 
 func Restore(c *config.Config) error {
 	// Get volumes data
-	volumesData, err := GetVolumesData(c.BackupFile, filepath.Join(c.Prefix, volumesDataFileName))
+	volumesData, err := GetVolumesData(backuptar.Path, VolumesDataPath(c))
 	if err != nil {
 		return err
 	}
@@ -29,14 +30,14 @@ func Restore(c *config.Config) error {
 				return err
 			}
 			// Replace directory with backup data
-			err = ExtractDir(c.BackupFile, filepath.Join(c.Prefix, v.Id), v.Target)
+			err = backuptar.ExtractDir(backuptar.Path, filepath.Join(c.Prefix, v.Id), v.Target)
 			if err != nil {
 				return err
 			}
 		case "file":
 			log.Printf("%-15s : %s", "RESTORING FILE", v.Target)
 			// Replace file with backup data
-			err := ExtractFile(c.BackupFile, filepath.Join(c.Prefix, v.Id), v.Target)
+			err := backuptar.ExtractFile(backuptar.Path, filepath.Join(c.Prefix, v.Id), v.Target)
 			if err != nil {
 				return err
 			}

@@ -6,38 +6,42 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/NethermindEth/docker-volumes-snapshotter/pkg/backuptar"
 	"github.com/NethermindEth/docker-volumes-snapshotter/pkg/config"
 	"gopkg.in/yaml.v2"
 )
 
+func volumeId(target string) string {
+	hash := sha256.Sum256([]byte(target))
+	return hex.EncodeToString(hash[:])
+}
+
 func Backup(c *config.Config) error {
-	tarFile, err := NewTarFileWriter(c.BackupFile, true)
+	backupWriter, err := backuptar.NewBackupWriter(backuptar.Path)
 	if err != nil {
 		return err
 	}
+	defer backupWriter.Close()
 
-	var volumesData []volumeData
-
+	var volumesData []VolumeData
 	for _, v := range c.Volumes {
 		targetInfo, err := os.Stat(v)
 		if err != nil {
 			return err
 		}
-
-		volumeData := volumeData{
+		volumeData := VolumeData{
 			Id:     volumeId(v),
 			Target: v,
 		}
-
 		if targetInfo.IsDir() {
 			volumeData.Type = "dir"
-			err := tarFile.AddDir(v, filepath.Join(c.Prefix, volumeData.Id))
+			err := backupWriter.AddDir(v, filepath.Join(c.Prefix, volumeData.Id))
 			if err != nil {
 				return err
 			}
 		} else {
 			volumeData.Type = "file"
-			err := tarFile.AddFile(v, filepath.Join(c.Prefix, volumeData.Id))
+			err := backupWriter.AddFile(v, filepath.Join(c.Prefix, volumeData.Id))
 			if err != nil {
 				return err
 			}
@@ -61,14 +65,5 @@ func Backup(c *config.Config) error {
 	if err != nil {
 		return err
 	}
-	err = tarFile.AddFile(dataTemp.Name(), filepath.Join(c.Prefix, volumesDataFileName))
-	if err != nil {
-		return err
-	}
-	return tarFile.Close()
-}
-
-func volumeId(target string) string {
-	hash := sha256.Sum256([]byte(target))
-	return hex.EncodeToString(hash[:])
+	return backupWriter.AddFile(dataTemp.Name(), VolumesDataPath(c))
 }

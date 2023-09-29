@@ -9,14 +9,20 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+const (
+	ConfigFileName = "config.yml"
+	ConfigFilePath = "/" + ConfigFileName
+)
+
+// Config is the configuration for the backup/restore process.
 type Config struct {
-	Prefix     string   `yaml:"prefix"`
-	BackupFile string   `yaml:"backup_file"`
-	Volumes    []string `yaml:"volumes"`
+	Prefix  string   `yaml:"prefix"`
+	Volumes []string `yaml:"volumes"`
 }
 
-func LoadConfig(path string) (*Config, error) {
-	configFile, err := os.Open(path)
+// LoadConfig loads the configuration from the ConfigFilePath file.
+func LoadConfig() (*Config, error) {
+	configFile, err := os.Open(ConfigFilePath)
 	if err != nil {
 		return nil, err
 	}
@@ -40,4 +46,21 @@ func LoadConfig(path string) (*Config, error) {
 		}
 	}
 	return &config, nil
+}
+
+// Save saves the configuration to the given path in YAML format.
+func (c *Config) Save(path string) error {
+	configFile, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+	if err != nil {
+		return err
+	}
+	defer configFile.Close()
+
+	configData, err := yaml.Marshal(c)
+	if err != nil {
+		return err
+	}
+
+	_, err = configFile.Write(configData)
+	return err
 }
