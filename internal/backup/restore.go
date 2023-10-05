@@ -2,7 +2,7 @@ package backup
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -23,20 +23,20 @@ func Restore(c *config.Config) error {
 		}
 		switch v.Type {
 		case "dir":
-			log.Printf("%-15s : %s", "RESTORING DIR", v.Target)
 			// Clear directory
 			err := clearDirectory(v.Target)
 			if err != nil {
 				return err
 			}
 			// Replace directory with backup data
+			slog.Info("Restoring dir", "src", filepath.Join(c.Prefix, v.Id), "dest", v.Target)
 			err = backuptar.ExtractDir(backuptar.Path, filepath.Join(c.Prefix, v.Id), v.Target)
 			if err != nil {
 				return err
 			}
 		case "file":
-			log.Printf("%-15s : %s", "RESTORING FILE", v.Target)
 			// Replace file with backup data
+			slog.Info("Restoring file", "src", filepath.Join(c.Prefix, v.Id), "dest", v.Target)
 			err := backuptar.ExtractFile(backuptar.Path, filepath.Join(c.Prefix, v.Id), v.Target)
 			if err != nil {
 				return err
@@ -67,7 +67,6 @@ func clearDirectory(path string) error {
 	}
 	for _, item := range dirItems {
 		itemPath := filepath.Join(path, item.Name())
-		log.Printf("%-15s : %s", "removing", itemPath)
 		err := os.RemoveAll(itemPath)
 		if err != nil {
 			return err

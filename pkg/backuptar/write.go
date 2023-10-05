@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 )
@@ -63,8 +62,6 @@ func NewBackupWriter(tarPath string) (*BackupWriter, error) {
 
 // AddDir adds a directory into the backup tar file.
 func (b *BackupWriter) AddDir(src, dest string) error {
-	log.Printf("Adding dir: \"%s\" into \"%s\"...", src, dest)
-
 	// walk through every file in the folder
 	return filepath.Walk(src, func(file string, fi os.FileInfo, err error) error {
 		if err != nil {
@@ -108,8 +105,6 @@ func (b *BackupWriter) AddDir(src, dest string) error {
 
 // AddFile adds a file into the backup tar file.
 func (b *BackupWriter) AddFile(src, dest string) error {
-	log.Printf("Adding file: \"%s\" into \"%s\"...", src, dest)
-
 	fi, err := os.Stat(src)
 	if err != nil {
 		return err

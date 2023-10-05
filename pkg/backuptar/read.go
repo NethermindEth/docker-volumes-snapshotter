@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,7 +42,6 @@ func ExtractDir(tarPath, srcTarPath, fsPathTarget string) error {
 					return fmt.Errorf("failed to create directory %s: %w", targetPath, err)
 				}
 			case tar.TypeReg:
-				log.Printf("%-15s : %s", "extract file", targetPath)
 				fileDir := filepath.Dir(targetPath)
 				err := os.MkdirAll(fileDir, 0o755)
 				if err != nil {
@@ -81,7 +79,6 @@ func ExtractFile(tarPath, srcTarPath, fsPathTarget string) error {
 			return err
 		}
 		if header.Name == srcTarPath {
-			log.Printf("%-15s : %s", "extract file", fsPathTarget)
 			fileDir := filepath.Dir(fsPathTarget)
 			err := os.MkdirAll(fileDir, 0o755)
 			if err != nil {
