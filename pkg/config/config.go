@@ -9,10 +9,9 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-const (
-	ConfigFileName = "config.yml"
-	ConfigFilePath = "/" + ConfigFileName
-)
+const ConfigFileName = "config.yml"
+
+var ConfigFilePath = "/" + ConfigFileName
 
 // Config is the configuration for the backup/restore process.
 type Config struct {

@@ -50,6 +50,11 @@ func NewBackupWriter(tarPath string) (*BackupWriter, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Truncate last 1024 bytes
+	err = tarFile.Truncate(stats.Size() - 1024)
+	if err != nil {
+		return nil, err
+	}
 	return &BackupWriter{
 		file:      tarFile,
 		tarWriter: tar.NewWriter(tarFile),

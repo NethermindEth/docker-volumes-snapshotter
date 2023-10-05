@@ -98,7 +98,8 @@ func ExtractFile(tarPath, srcTarPath, fsPathTarget string) error {
 			if n != header.Size {
 				return fmt.Errorf("failed to copy file %s: copied %d bytes instead of %d", fsPathTarget, n, header.Size)
 			}
+			return nil
 		}
 	}
-	return nil
+	return ErrFileNotFound
 }
