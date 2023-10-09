@@ -1,98 +1,168 @@
 # Docker Volumes Snapshotter
 
-This repository is useful for create a snapshot of a list of volumes into a
-tar file.
+The snapshotter project was created to fulfill the requirement of saving all the volumes of a Docker container to a tar file, which can be restored at a later time. By properly configuring it, volumes from different containers can be saved in the same tar file.
+
+> The tar file can either already exist or be empty. An empty tar file is not a zero-byte file. To understand this better, refer to the [Initialize `tar` file](#initialize-tar-file) section.
+
+The snapshotter container should run with the same volumes as the container whose data should be saved. One way to achieve this is by running the snapshotter container with the `-volumes-from` flag.
 
 - [Docker Volumes Snapshotter](#docker-volumes-snapshotter)
   - [Build snapshotter image](#build-snapshotter-image)
-  - [Running the snapshotter](#running-the-snapshotter)
+  - [Backup](#backup)
+  - [Restore](#restore)
+  - [Configuration file](#configuration-file)
+    - [Passing the configuration file](#passing-the-configuration-file)
+    - [Configuration format](#configuration-format)
     - [Example](#example)
+  - [Backup file](#backup-file)
+    - [Initialize `tar` file](#initialize-tar-file)
+      - [Using the `backuptar` package](#using-the-backuptar-package)
+      - [Using a CLI command](#using-a-cli-command)
+    - [Passing the backup `tar` file](#passing-the-backup-tar-file)
 
 ![diagram](img/snapshotter-diagram.png)
 
 ## Build snapshotter image
 
-To build the image using this public repository as context you can use the
-following command:
-
-```bash
-docker build -t docker-volumes-snapshotter github.com/NethermindEth/docker-volumes-snapshotter.git
-```
-
-If you prefer, you can use the Dockerfile from this repository directly cloning
-the repository first:
-
-```bash
-git clone github.com/NethermindEth/docker-volumes-snapshotter.git
-cd docker-volumes-snapshotter
-docker build -t docker-volumes-snapshotter .
-```
-
-## Running the snapshotter
-
-To run the snapshotter a configuration file is required. This file is a YAML file with the following structure:
-
 ```yaml
-prefix: "prefix/path/to/store/the/backup"
-out: "/path/to/backup.tar"
-volumes:
-  - "/path/to/volume1"
-  - "/path/to/volume2"
+docker build -t snapshotter:v0.2.0 github.com/NethermindEth/docker-volumes-snapshotter.git#v0.2.0
 ```
 
-The snapshotter tries to append the volumes to the backup tar file. If the tar file does not exists, or is empty, an error is raised. To initialize a proper empty tar file run the following command:
+## Backup
+
+To backup volumes from a Docker container use the `backup` command, bind the volumes, configuration file and the `backup.tar` file.
 
 ```bash
-tar -cvf backup.tar --files-from /dev/null
+docker run \
+  --rm \
+  --volumes-from <container> \
+  -v $(pwd)/backup.tar:/backup.tar \
+  -v $(pwd)/config.yml:/config.yml \
+  eigenlayer-snapshotter:v0.2.0 backup
 ```
 
-You can run the snapshotter different times targeting the same output tar file using different prefix paths. This is useful to create backups of different containers in the same tar file.
+## Restore
+
+To restore volumes of a Docker container use the `restore` command, bind volumes, configuration file and the `backup.tar` file.
+
+```bash
+docker run \
+  --rm \
+  --volumes-from <container> \
+  -v $(pwd)/backup.tar:/backup.tar \
+  -v $(pwd)/config.yml:/config.yml \
+  eigenlayer-snapshotter:v0.2.0 restore
+```
+
+## Configuration file
+
+### Passing the configuration file
+
+The snapshotter process requires the configuration file to be located at the `/config.yml` path inside the container. Therefore, the recommended way to pass the configuration is by mounting the following volume:
+
+```text
+--volume <path-to-config>:/config.yml
+```
+
+Replace `<path-to-config>` with the absolute path to the configuration file on the host machine.
+
+### Configuration format
+
+The snapshotter does not need too many configurations, only two options are necessary:
+
+1. `prefix`: is the prefix path to store the volumes inside the backup tarball file
+2. `volumes`: list of volume targets inside the container, should be absolute paths to a directory or a file inside the container
 
 ### Example
 
-Add the following configuration file to the root of this repository as `config.yml`:
+The following example configures the snapshotter to save volumes under the `prefix/path` inside the `backup.tar` file. Volumes could be directories like `volume1` and `volume3` or files like `volume2.txt`.
 
 ```yaml
-prefix: volumes/mock-avs-second
-out: /backup.tar
+prefix: "prefix/path"
 volumes:
-  - /cli
-  - /README.md
+ - /path/to/volume1
+ - /path/to/volume2.txt
+ - /path/to/volume3
 ```
 
-Run following command in the root of this repository:
+## Backup file
+
+### Initialize `tar` file
+
+The backup tar file should be empty or not. However, in any case, it should end with 1024 zero bytes. These zero bytes consist of two empty blocks of 512 bytes each, which define an end-of-archive, as specified in [the spec](https://www.gnu.org/software/tar/manual/html_node/Standard.html). This requirement is necessary to enable the appending of files to existing tar files that contain volumes from other containers, but are located at different paths within the tarball.
+
+The initialization of a backup tar file involves creating a file with a `.tar` extension, with the content being 1024 zero bytes.
+
+#### Using the `backuptar` package
+
+The backup tar file could be initialized using the `InitBackupTar` in the `[backuptar](https://github.com/NethermindEth/docker-volumes-snapshotter/tree/main/pkg/backuptar)` package. For instance:
+
+```go
+package main
+
+import (
+ "fmt"
+ "io"
+ "log"
+ "os"
+
+ "github.com/NethermindEth/docker-volumes-snapshotter/pkg/backuptar"
+)
+
+func main() {
+ err := backuptar.InitBackupTar("backup.tar")
+ if err != nil {
+  log.Fatal(err)
+ }
+
+ backupStat, err := os.Stat("backup.tar")
+ if err != nil {
+  log.Fatal(err)
+ }
+
+ fmt.Printf("Backup size: %d\n", backupStat.Size())
+
+ backupF, err := os.Open("backup.tar")
+ if err != nil {
+  log.Fatal(err)
+ }
+ defer backupF.Close()
+
+ backupData, err := io.ReadAll(backupF)
+ if err != nil {
+  log.Fatal(err)
+ }
+
+ fmt.Printf("Backup data:\n%v\n", backupData)
+}
+```
+
+```text
+Backup size: 1024
+Backup data:
+[0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0]
+```
+
+#### Using a CLI command
+
+The following command generates a `backup.tar` file with two blocks of 512 zero bytes
 
 ```bash
-docker run --rm \
-    -v $(pwd)/backup.tar:/backup.tar \       # Bind the backup tar
-    -v $(pwd)/config.yml:/snapshotter.yml \  # Bind the configuration file
-    -v $(pwd)/cli:/cli \                     # Bind a volume to backup
-    -v $(pwd)/README.md:/README.md \         # Bind a file to backup
-    docker-volumes-snapshotter
+dd if=/dev/zero of=backup.tar bs=512 count=2
 ```
 
-Checking the content of the tar file:
-
-```bash
-tar -tvf backup.tar
+```text
+2+0 records in
+2+0 records out
+1024 bytes (1.0 kB, 1.0 KiB) copied, 0.00199071 s, 514 kB/s
 ```
 
-Output:
+### Passing the backup `tar` file
 
-```bash
-drwxr-xr-x  0 root   root        0 Sep 21 14:53 volumes/mock-avs-second/1821030e0e15cc096c6c3a13c936baad1b8a4a98f0cbaf2b25cd4642203093fd
--rw-r--r--  0 root   root      653 Sep 22 11:46 volumes/mock-avs-second/1821030e0e15cc096c6c3a13c936baad1b8a4a98f0cbaf2b25cd4642203093fd/cli.go
--rw-r--r--  0 root   root     1929 Sep 22 14:52 volumes/mock-avs-second/95e0a42d9d6b5d82bdb3752f4d31f3fe7d0150c6b512bc094985b1a2b24b192b
--rw-------  0 root   root      203 Sep 22 14:52 volumes/mock-avs-second/volumes-data.yml
+The snapshotter process requires the backup tar file to be located at the `/backup.tar` path inside the cotainer. Therefore, the proper way to pass the configuration is by mounting the following volume:
+
+```text
+--volume <path-to-backup-tar>:/backup.tar
 ```
 
-Notice the presence of the `volumes-data.yml` file. This file contains metadata about the list of volumes in the prefix path. This file is used by the restore process to restore the volumes in the same path. The content of this file is:
-
-```yaml
-- id: 1821030e0e15cc096c6c3a13c936baad1b8a4a98f0cbaf2b25cd4642203093fd
-  type: dir
-  target: /cli
-- id: 95e0a42d9d6b5d82bdb3752f4d31f3fe7d0150c6b512bc094985b1a2b24b192b
-  type: file
-  target: /README.md
-```
+Replace `<path-to-backup-tar>` with absolute path to the configuration file on the host machine.
