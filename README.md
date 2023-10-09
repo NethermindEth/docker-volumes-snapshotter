@@ -4,7 +4,7 @@ The snapshotter project was created to fulfill the requirement of saving all the
 
 > The tar file can either already exist or be empty. An empty tar file is not a zero-byte file. To understand this better, refer to the [Initialize `tar` file](#initialize-tar-file) section.
 
-The snapshotter container should run with the same volumes as the container whose data should be saved. One way to achieve this is by running the snapshotter container with the `-volumes-from` flag.
+The snapshotter container should run with the same volumes as the container whose data should be saved. One way to achieve this is by running the snapshotter container with the `--volumes-from` flag.
 
 - [Docker Volumes Snapshotter](#docker-volumes-snapshotter)
   - [Build snapshotter image](#build-snapshotter-image)
@@ -30,7 +30,7 @@ docker build -t snapshotter:v0.2.0 github.com/NethermindEth/docker-volumes-snaps
 
 ## Backup
 
-To backup volumes from a Docker container use the `backup` command, bind the volumes, configuration file and the `backup.tar` file.
+To backup volumes from a Docker container use the `backup` command, [bind-mount](https://docs.docker.com/storage/bind-mounts/) the volumes, [configuration file](#configuration-file) and the [`backup.tar`](#backup-file) file.
 
 ```bash
 docker run \
@@ -41,9 +41,11 @@ docker run \
   eigenlayer-snapshotter:v0.2.0 backup
 ```
 
+> Replace the `<container>` placeholder with the name or id of the container whose volumes should be saved.
+
 ## Restore
 
-To restore volumes of a Docker container use the `restore` command, bind volumes, configuration file and the `backup.tar` file.
+To restore volumes of a Docker container use the `restore` command, [bind-mount](https://docs.docker.com/storage/bind-mounts/) volumes, [configuration file](#configuration-file) and the [`backup.tar`](#backup-file) file.
 
 ```bash
 docker run \
@@ -53,6 +55,8 @@ docker run \
   -v $(pwd)/config.yml:/config.yml \
   eigenlayer-snapshotter:v0.2.0 restore
 ```
+
+> Replace the `<container>` placeholder with the name or id of the container whose volumes should be saved.
 
 ## Configuration file
 
@@ -75,21 +79,84 @@ The snapshotter does not need too many configurations, only two options are nece
 
 ### Example
 
-The following example configures the snapshotter to save volumes under the `prefix/path` inside the `backup.tar` file. Volumes could be directories like `volume1` and `volume3` or files like `volume2.txt`.
+Give the following directory structure in the host machine file system:
+
+```text
+test-volumes
+├── volume1
+│   └── file.txt
+├── volume2.txt
+└── volume3
+    └── file.txt
+
+3 directories, 3 files
+```
+
+If the a Docker container is created using the following command:
+
+```bash
+docker run \
+  -v $(pwd)/test-volumes/volume1:/home/volume1 \
+  -v $(pwd)/test-volumes/volume2.txt:/home/volume2.txt \
+  -v $(pwd)/test-volumes/volume3:/home/volume3 \
+  busybox tree /home
+```
+
+The output should be the following, showing the file system structure inside the container:
+
+```text
+/home
+├── volume1
+│   └── file.txt
+├── volume2.txt
+└── volume3
+    └── file.txt
+
+2 directories, 3 files
+```
+
+Checking existing containers, the container name is `busy_lewin`:
+
+```bash
+$ docker ps -a
+CONTAINER ID   IMAGE     COMMAND        CREATED         STATUS                     PORTS     NAMES
+9c4324261041   busybox   "tree /home"   8 seconds ago   Exited (0) 7 seconds ago             busy_lewin
+```
+
+Checking container volumes:
+
+```bash
+docker inspect \
+  --format='{{range .Mounts}}{{print .Source}}:{{println .Destination}}{{end}}' \
+  busy_lewin
+```
+
+The output should be:
+
+```text
+/abs/path/test-volumes/volume3:/home/volume3
+/abs/path/test-volumes/volume1:/home/volume1
+/abs/path/test-volumes/volume2.txt:/home/volume2.txt
+```
+
+Finally, to backup the volumes of the `busy_lewin` container, the following configuration file could be used:
 
 ```yaml
-prefix: "prefix/path"
+prefix: "volumes/busy_lewin"
 volumes:
- - /path/to/volume1
- - /path/to/volume2.txt
- - /path/to/volume3
+  - /home/volume1
+  - /home/volume2.txt
+  - /home/volume3
 ```
+
+> The `prefix` path is relative to the root of the tar file. The `volumes` paths
+> are absolute and equal to the `Destination` part of the mounts  of the `busy_lewin` container.
 
 ## Backup file
 
 ### Initialize `tar` file
 
-The backup tar file should be empty or not. However, in any case, it should end with 1024 zero bytes. These zero bytes consist of two empty blocks of 512 bytes each, which define an end-of-archive, as specified in [the spec](https://www.gnu.org/software/tar/manual/html_node/Standard.html). This requirement is necessary to enable the appending of files to existing tar files that contain volumes from other containers, but are located at different paths within the tarball.
+The backup tar file must not be empty; it must end with 1024 zero bytes. These zero bytes consist of two empty blocks of 512 bytes each, which define an end-of-archive, as specified in the spec. This requirement is necessary to enable the appending of files to existing tar files that contain volumes from other containers but are located at different paths within the tarball.
 
 The initialization of a backup tar file involves creating a file with a `.tar` extension, with the content being 1024 zero bytes.
 
@@ -159,10 +226,10 @@ dd if=/dev/zero of=backup.tar bs=512 count=2
 
 ### Passing the backup `tar` file
 
-The snapshotter process requires the backup tar file to be located at the `/backup.tar` path inside the cotainer. Therefore, the proper way to pass the configuration is by mounting the following volume:
+The snapshotter process requires the backup tar file to be located at the `/backup.tar` path inside the container. Therefore, the proper way to pass the backup file is by mounting the following volume:
 
 ```text
 --volume <path-to-backup-tar>:/backup.tar
 ```
 
-Replace `<path-to-backup-tar>` with absolute path to the configuration file on the host machine.
+Replace `<path-to-backup-tar>` with absolute path to the backup file on the host machine.
